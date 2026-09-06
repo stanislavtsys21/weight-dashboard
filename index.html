@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ru" data-coreui-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>Состав тела — дашборд</title>
+<meta name="description" content="Интерактивный дашборд динамики состава тела по отчётам умных весов">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%235856d6'/><text x='50' y='68' font-size='54' text-anchor='middle'>⚖️</text></svg>">
+<link href="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.9.0/dist/css/coreui.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ───────── тонкая настройка поверх CoreUI ───────── */
+:root{
+  --bt-low:#7fb8e8; --bt-std:#4fbf72; --bt-high:#f0a869;
+  --bt-grad-1:linear-gradient(135deg,#5856d6 0%,#3d3bb3 100%);
+  --bt-grad-2:linear-gradient(135deg,#3399ff 0%,#1f6fd1 100%);
+  --bt-grad-3:linear-gradient(135deg,#f9b115 0%,#e08d00 100%);
+  --bt-grad-4:linear-gradient(135deg,#e55353 0%,#c23434 100%);
+}
+[data-coreui-theme=dark]{ --bt-low:#3d79ad; --bt-std:#2f9455; --bt-high:#c17d3b; }
+body{font-feature-settings:"tnum" 1;}
+@media (min-width:768px){
+  .wrapper{padding-inline-start:var(--cui-sidebar-width,16rem);transition:padding .15s}
+  .sidebar.sidebar-narrow-unfoldable ~ .wrapper{padding-inline-start:var(--cui-sidebar-narrow-width,4rem)}
+  .sidebar.hide ~ .wrapper{padding-inline-start:0}
+}
+.sidebar-brand{gap:.6rem;font-weight:700;letter-spacing:.02em}
+.sidebar-brand .logo{width:32px;height:32px;border-radius:8px;background:var(--bt-grad-1);display:grid;place-items:center;font-size:15px}
+.header .avatar-sm{width:32px;height:32px;border-radius:50%;background:var(--bt-grad-1);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px}
+.card{border-radius:.75rem;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.card-title-sm{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--cui-secondary-color);font-weight:600}
+.chart-wrap{position:relative}
+.text-medium-emphasis{color:var(--cui-secondary-color)}
+
+/* KPI виджеты */
+.kpi{color:#fff;border:0;overflow:hidden;position:relative}
+.kpi.g1{background:var(--bt-grad-1)}.kpi.g2{background:var(--bt-grad-2)}.kpi.g3{background:var(--bt-grad-3)}.kpi.g4{background:var(--bt-grad-4)}
+.kpi .fs-4{letter-spacing:-.01em}
+.kpi .kpi-chart{height:70px;margin:.75rem -1px 0}
+.kpi .glow{position:absolute;right:-40px;top:-40px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.08);pointer-events:none}
+.kpi .btn-link{color:rgba(255,255,255,.75)}
+.kpi .delta{display:inline-flex;align-items:center;gap:.25rem;font-size:.8rem;background:rgba(255,255,255,.18);padding:.1rem .5rem;border-radius:999px;margin-left:.5rem;vertical-align:middle}
+
+/* инсайты */
+.insight{display:flex;gap:.9rem;align-items:flex-start;padding:1rem;border-radius:.75rem;background:var(--cui-tertiary-bg);height:100%}
+.insight .ico{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:0 0 40px}
+.insight .ico svg{width:20px;height:20px}
+.insight b{display:block;margin-bottom:.15rem}
+.insight small{color:var(--cui-secondary-color);line-height:1.4;display:block}
+
+/* нижняя полоса под графиком (как в CoreUI traffic) */
+.stat-row .stat{padding:1rem .5rem;text-align:center;border-inline-end:1px solid var(--cui-border-color)}
+.stat-row .stat:last-child{border-inline-end:0}
+.stat-row .progress{height:4px;margin-top:.5rem}
+
+/* спидометры */
+.gauge{position:relative;text-align:center;padding:.5rem .25rem 0}
+.gauge svg{width:100%;max-width:190px;height:auto;overflow:visible}
+.gauge .needle{transform-origin:100px 100px;transition:transform 1.1s cubic-bezier(.2,.8,.2,1)}
+.gauge .gv{font-size:1.5rem;font-weight:700;line-height:1;margin-top:.1rem;letter-spacing:-.01em}
+.gauge .gn{font-size:.8rem;color:var(--cui-secondary-color);margin-top:.15rem}
+.gauge .badge{font-weight:500}
+.gauge .tk{font-size:9px;fill:var(--cui-secondary-color)}
+
+/* тепловая карта тела */
+.bodymap{position:relative;display:flex;justify-content:center}
+.bodymap svg{width:100%;max-width:260px;height:auto}
+.bodymap path,.bodymap ellipse,.bodymap rect{stroke:var(--cui-card-bg);stroke-width:3;transition:fill .4s;cursor:pointer}
+.bodymap .seg:hover{filter:brightness(1.08);stroke:var(--cui-body-color)}
+.bodymap .lbl{font-size:10px;fill:var(--cui-body-color);font-weight:600;pointer-events:none;text-anchor:middle}
+.bodymap .lbl2{font-size:8.5px;fill:var(--cui-secondary-color);pointer-events:none;text-anchor:middle}
+.heatlegend{display:flex;gap:.5rem;align-items:center;font-size:.75rem;color:var(--cui-secondary-color);justify-content:center;flex-wrap:wrap}
+.heatlegend i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+/* линейные шкалы */
+.scale-row{display:grid;grid-template-columns:180px 1fr 96px;align-items:center;gap:1rem;padding:.7rem 0;border-bottom:1px solid var(--cui-border-color-translucent)}
+.scale-row:last-child{border-bottom:0}
+.scale-row .nm{font-weight:500;font-size:.9rem}
+.scale-row .nm small{display:block;color:var(--cui-secondary-color);font-size:.72rem;font-weight:400}
+.scale-row .rng{text-align:end;color:var(--cui-secondary-color);font-size:.75rem}
+.scale{position:relative;height:36px}
+.scale .track{position:absolute;left:0;right:0;top:15px;height:8px;border-radius:4px;overflow:hidden;display:flex}
+.scale .track i{display:block;height:100%}
+.scale .tick{position:absolute;top:26px;font-size:.62rem;color:var(--cui-secondary-color);transform:translateX(-50%)}
+.scale .m{position:absolute;top:14px;width:10px;height:10px;border-radius:50%;background:var(--cui-card-bg);border:2px solid var(--cui-secondary-color);transform:translateX(-50%);cursor:pointer;opacity:.6;transition:transform .15s}
+.scale .m:hover{transform:translateX(-50%) scale(1.3);opacity:1;z-index:2}
+.scale .m.cur{width:14px;height:14px;top:12px;background:var(--cui-primary);border-color:#fff;box-shadow:0 0 0 2px var(--cui-primary);opacity:1;z-index:3}
+.scale .m.cur.warn{background:var(--cui-warning);box-shadow:0 0 0 2px var(--cui-warning)}
+.scale .m.cur.bad{background:var(--cui-danger);box-shadow:0 0 0 2px var(--cui-danger)}
+.scale .val{position:absolute;top:-3px;font-size:.75rem;font-weight:600;transform:translateX(-50%);background:var(--cui-card-bg);padding:0 4px;border-radius:3px}
+.legend-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* тип телосложения */
+.types{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}
+.types div{background:var(--cui-tertiary-bg);border:1px solid var(--cui-border-color);border-radius:.5rem;padding:.6rem .3rem;text-align:center;font-size:.72rem;color:var(--cui-secondary-color);line-height:1.2}
+.types div.on{background:var(--cui-primary);color:#fff;border-color:var(--cui-primary);font-weight:600}
+.types div.was{border-color:var(--cui-primary);color:var(--cui-body-color)}
+
+/* сравнение */
+.cmp td.up{color:var(--cui-success)}.cmp td.down{color:var(--cui-danger)}.cmp td.flat{color:var(--cui-secondary-color)}
+.table thead th{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--cui-secondary-color);font-weight:600}
+.num{text-align:end;font-variant-numeric:tabular-nums}
+
+.section-anchor{scroll-margin-top:110px}
+.fade-up{animation:fadeUp .5s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(max-width:768px){.scale-row{grid-template-columns:1fr;gap:.3rem}.scale-row .rng{text-align:start}.card-body{padding:1rem}}
+.btn-group{flex-wrap:wrap}
+.body,.wrapper{overflow-x:clip}
+.kpi{height:100%}.kpi .kpi-chart{margin-top:auto}
+@media print{.sidebar,.header,.footer,.no-print{display:none!important}.wrapper{padding:0!important}.card{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+
+<!-- ───────── SIDEBAR ───────── -->
+<div class="sidebar sidebar-dark sidebar-fixed border-end" id="sidebar">
+  <div class="sidebar-header border-bottom">
+    <div class="sidebar-brand d-flex align-items-center"><span class="logo">⚖️</span><span class="sidebar-brand-full">СОСТАВ ТЕЛА</span></div>
+  </div>
+  <ul class="sidebar-nav" data-coreui="navigation" data-coreui-toggle="navigation" id="sideNav">
+    <li class="nav-item"><a class="nav-link active" href="#top"><svg class="nav-icon"><use href="#cil-speedometer"/></svg> Дашборд <span class="badge badge-sm bg-info ms-auto" id="navBadge">4 замера</span></a></li>
+    <li class="nav-title">Разделы</li>
+    <li class="nav-item"><a class="nav-link" href="#dyn"><svg class="nav-icon"><use href="#cil-chart-line"/></svg> Динамика</a></li>
+    <li class="nav-item"><a class="nav-link" href="#gauges"><svg class="nav-icon"><use href="#cil-balance-scale"/></svg> Шкалы</a></li>
+    <li class="nav-item"><a class="nav-link" href="#body"><svg class="nav-icon"><use href="#cil-running"/></svg> Карта тела</a></li>
+    <li class="nav-item"><a class="nav-link" href="#profile"><svg class="nav-icon"><use href="#cil-graph"/></svg> Профиль тела</a></li>
+    <li class="nav-item"><a class="nav-link" href="#compare"><svg class="nav-icon"><use href="#cil-swap-horizontal"/></svg> Сравнение</a></li>
+    <li class="nav-item"><a class="nav-link" href="#table"><svg class="nav-icon"><use href="#cil-list"/></svg> Таблица</a></li>
+    <li class="nav-title">Профиль</li>
+    <li class="nav-item"><span class="nav-link"><svg class="nav-icon"><use href="#cil-user"/></svg> Stanislav Tsys</span></li>
+    <li class="nav-item"><span class="nav-link"><svg class="nav-icon"><use href="#cil-line-weight"/></svg> 185 см · 33 года</span></li>
+  </ul>
+  <div class="sidebar-footer border-top d-none d-md-flex"><button class="sidebar-toggler" type="button" data-coreui-toggle="unfoldable"></button></div>
+</div>
+
+<!-- ───────── WRAPPER ───────── -->
+<div class="wrapper d-flex flex-column min-vh-100">
+  <header class="header header-sticky p-0 mb-4">
+    <div class="container-fluid border-bottom px-4">
+      <button class="header-toggler" type="button" onclick="coreui.Sidebar.getOrCreateInstance(document.querySelector('#sidebar')).toggle()" style="margin-inline-start:-14px"><svg class="icon icon-lg"><use href="#cil-menu"/></svg></button>
+      <ul class="header-nav d-none d-lg-flex">
+        <li class="nav-item"><a class="nav-link" href="#top">Дашборд</a></li>
+        <li class="nav-item"><a class="nav-link" href="#dyn">Динамика</a></li>
+        <li class="nav-item"><a class="nav-link" href="#table">Таблица</a></li>
+      </ul>
+      <ul class="header-nav ms-auto align-items-center">
+        <li class="nav-item d-none d-md-block"><span class="nav-link text-medium-emphasis" id="hdrDate"></span></li>
+        <li class="nav-item"><button class="btn btn-link nav-link" title="Печать / PDF" onclick="window.print()"><svg class="icon icon-lg"><use href="#cil-print"/></svg></button></li>
+      </ul>
+      <ul class="header-nav">
+        <li class="nav-item py-1"><div class="vr h-100 mx-2 text-body text-opacity-75"></div></li>
+        <li class="nav-item"><button class="btn btn-link nav-link" id="themeBtn" title="Тёмная / светлая тема"><svg class="icon icon-lg" id="themeIcon"><use href="#cil-moon"/></svg></button></li>
+        <li class="nav-item py-1"><div class="vr h-100 mx-2 text-body text-opacity-75"></div></li>
+        <li class="nav-item"><span class="nav-link py-0"><span class="avatar-sm">ST</span></span></li>
+      </ul>
+    </div>
+    <div class="container-fluid px-4">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb my-0">
+        <li class="breadcrumb-item"><a href="#top">Главная</a></li>
+        <li class="breadcrumb-item active"><span>Анализ веса</span></li>
+      </ol></nav>
+    </div>
+  </header>
+
+  <div class="body flex-grow-1" id="top">
+    <div class="container-lg px-4">
+
+      <!-- ───── KPI ───── -->
+      <div class="row g-4 mb-4" id="kpis"></div>
+
+      <!-- ───── ИНСАЙТЫ ───── -->
+      <div class="card mb-4 fade-up">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div><h4 class="card-title mb-0" id="insTitle">Итоги</h4><div class="small text-medium-emphasis" id="insSub"></div></div>
+            <span class="badge text-bg-success rounded-pill d-none d-sm-inline" id="insBadge"></span>
+          </div>
+          <div class="row g-3" id="insights"></div>
+        </div>
+      </div>
+
+      <!-- ───── ДИНАМИКА ───── -->
+      <div class="card mb-4 section-anchor" id="dyn">
+        <div class="card-body">
+          <div class="d-flex justify-content-between flex-wrap gap-3">
+            <div><h4 class="card-title mb-0">Динамика показателей</h4><div class="small text-medium-emphasis" id="dynSub"></div></div>
+            <div class="d-flex gap-2 flex-wrap align-items-start">
+              <div class="btn-group btn-group-sm" role="group" id="metricGroup"></div>
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-secondary dropdown-toggle" data-coreui-toggle="dropdown" type="button">Ещё</button>
+                <ul class="dropdown-menu dropdown-menu-end" id="metricMore"></ul>
+              </div>
+              <button class="btn btn-sm btn-primary" id="normBtn" title="Показать / скрыть полосу нормы"><svg class="icon"><use href="#cil-check-circle"/></svg> Норма</button>
+            </div>
+          </div>
+          <div class="chart-wrap mt-3" style="height:320px"><canvas id="mainChart"></canvas></div>
+        </div>
+        <div class="card-footer bg-transparent p-0">
+          <div class="row g-0 stat-row text-center" id="stats"></div>
+        </div>
+      </div>
+
+      <!-- ───── СПИДОМЕТРЫ ───── -->
+      <div class="card mb-4 section-anchor" id="gauges">
+        <div class="card-body">
+          <div class="d-flex justify-content-between flex-wrap gap-2 align-items-start">
+            <div><h4 class="card-title mb-0">Шкалы оценки</h4><div class="small text-medium-emphasis">Где ты относительно нормы по отчёту весов. Стрелка — выбранный замер</div></div>
+            <div class="btn-group btn-group-sm" id="dateGroup"></div>
+          </div>
+          <div class="row g-3 mt-1" id="gaugeRow"></div>
+          <div class="heatlegend mt-3"><span><i style="background:var(--bt-low)"></i>Низкое</span><span><i style="background:var(--bt-std)"></i>Стандарт</span><span><i style="background:var(--bt-high)"></i>Высокое</span></div>
+          <hr class="my-4">
+          <a class="d-flex align-items-center text-decoration-none" data-coreui-toggle="collapse" href="#scalesAll" role="button" aria-expanded="false"><svg class="icon me-2"><use href="#cil-list"/></svg><span class="fw-semibold">Все шкалы, линейный вид</span><span class="ms-2 small text-medium-emphasis">(13 показателей, ○ прошлые замеры · ● выбранный)</span></a>
+          <div class="collapse mt-3" id="scalesAll"><div id="scaleList"></div></div>
+        </div>
+      </div>
+
+      <!-- ───── КАРТА ТЕЛА + СЕГМЕНТЫ ───── -->
+      <div class="row g-4 mb-4 section-anchor" id="body">
+        <div class="col-lg-4">
+          <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div><h4 class="card-title mb-0">Карта тела</h4><div class="small text-medium-emphasis">Цвет = % от нормы сегмента</div></div>
+                <div class="btn-group btn-group-sm" id="bodyKind"><button class="btn btn-outline-secondary active" data-k="muscle">Мышцы</button><button class="btn btn-outline-secondary" data-k="fat">Жир</button></div>
+              </div>
+              <div class="bodymap my-3 flex-grow-1" id="bodymap"></div>
+              <div class="heatlegend" id="bodyLegend"></div>
+              <div class="small text-medium-emphasis mt-2 text-center" id="bodyDate"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between flex-wrap gap-2 align-items-start">
+                <div><h4 class="card-title mb-0">Сегментарный анализ</h4><div class="small text-medium-emphasis">Руки, туловище, ноги — все замеры рядом</div></div>
+                <div class="btn-group btn-group-sm" id="segUnit"><button class="btn btn-outline-secondary active" data-u="0">кг</button><button class="btn btn-outline-secondary" data-u="1">% от нормы</button></div>
+              </div>
+              <div class="chart-wrap mt-3" style="height:290px"><canvas id="segChart"></canvas></div>
+              <div class="small text-medium-emphasis mt-2" id="segNote"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── ПРОФИЛЬ ТЕЛА + СОСТАВ + МИНИ ───── -->
+      <div class="row g-4 mb-4 section-anchor" id="profile">
+        <div class="col-lg-5">
+          <div class="card h-100">
+            <div class="card-body">
+              <h4 class="card-title mb-0">Профиль тела</h4>
+              <div class="small text-medium-emphasis mb-2">Каждая ось: 0 % = нижняя граница нормы, 100 % = верхняя. Первый замер против последнего</div>
+              <div class="chart-wrap" style="height:300px"><canvas id="radarChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+          <div class="card h-100">
+            <div class="card-body">
+              <h4 class="card-title mb-0">Состав тела</h4>
+              <div class="small text-medium-emphasis mb-2" id="compSub"></div>
+              <div class="chart-wrap" style="height:180px"><canvas id="compChart"></canvas></div>
+              <div id="compLegend" class="mt-3 small"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+          <div class="d-flex flex-column gap-4 h-100" id="minis"></div>
+        </div>
+      </div>
+
+      <!-- ───── СРАВНЕНИЕ ───── -->
+      <div class="card mb-4 section-anchor" id="compare">
+        <div class="card-body">
+          <div class="d-flex justify-content-between flex-wrap gap-3 align-items-start">
+            <div><h4 class="card-title mb-0">Сравнить два замера</h4><div class="small text-medium-emphasis">Выбери даты — увидишь, что и на сколько изменилось</div></div>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select form-select-sm" id="cmpA" style="width:auto"></select>
+              <svg class="icon text-medium-emphasis"><use href="#cil-swap-horizontal"/></svg>
+              <select class="form-select form-select-sm" id="cmpB" style="width:auto"></select>
+            </div>
+          </div>
+          <div class="table-responsive mt-3"><table class="table table-sm table-hover align-middle mb-0 cmp" id="cmpTable"></table></div>
+        </div>
+      </div>
+
+      <!-- ───── ТАБЛИЦА ───── -->
+      <div class="card mb-4 section-anchor" id="table">
+        <div class="card-body">
+          <h4 class="card-title mb-0">Все показатели</h4>
+          <div class="small text-medium-emphasis mb-3">Полная таблица по всем замерам. Δ = последний минус первый, зелёный = изменение в нужную сторону</div>
+          <div class="table-responsive"><table class="table table-hover align-middle mb-0" id="dataTable"></table></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="footer px-4">
+    <div>Данные: отчёты умных весов «life» · <span id="ftDates"></span></div>
+    <div class="ms-auto">Собрано на <a href="https://coreui.io" target="_blank" rel="noopener">CoreUI 5</a> + Chart.js</div>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@coreui/coreui@5.9.0/dist/js/coreui.bundle.min.js"></script>
+<script>
+/* ═══════════════ ДАННЫЕ (считаны с отчётов весов) ═══════════════ */
+const DATES = ['2026-06-30 09:11','2026-07-04 10:15','2026-07-06 09:48','2026-09-05 09:14'];
+const LBL   = ['30 июн','4 июл','6 июл','5 сен'];
+const N = DATES.length, LAST = N-1;
+
+// better: 'in' — хорошо быть в норме; 'high' — выше нормы хорошо (мышцы); 'low' — ниже нормы хорошо (жир)
+const M = {
+  weight:  {name:'Вес',              short:'Вес',      unit:'кг',   vals:[88.65,88.75,88.00,85.95], norm:[64.0,86.6], dom:[40,130],   dec:2, better:'in'},
+  fatPct:  {name:'Масса жира',       short:'Жир %',    unit:'%',    vals:[8.9,9.4,10.8,9.0],        norm:[10.0,20.0], dom:[0,35],     dec:1, better:'low'},
+  fatKg:   {name:'Жир',              short:'Жир кг',   unit:'кг',   vals:[7.9,8.3,9.5,7.7],         norm:[8.6,17.2],  dom:[0,30],     dec:1, better:'low'},
+  skel:    {name:'Скелетные мышцы',  short:'Скел. мышцы',unit:'%',  vals:[52.3,52.0,51.2,52.2],     norm:[40.7,52.3], dom:[30,65],    dec:1, better:'high'},
+  muscle:  {name:'Мышцы',            short:'Мышцы',    unit:'%',    vals:[85.1,84.7,83.4,85.0],     norm:[70.2,86.0], dom:[60,95],    dec:1, better:'high'},
+  bmi:     {name:'ИМТ',              short:'ИМТ',      unit:'',     vals:[25.9,25.9,25.7,25.1],     norm:[18.5,25.0], dom:[15,35],    dec:1, better:'in'},
+  water:   {name:'Вода в организме', short:'Вода',     unit:'%',    vals:[66.9,66.6,65.6,66.9],     norm:[54.1,68.6], dom:[45,75],    dec:1, better:'in'},
+  protein: {name:'Белок',            short:'Белок',    unit:'%',    vals:[18.2,18.1,17.8,18.2],     norm:[14.0,18.3], dom:[10,22],    dec:1, better:'in'},
+  mineral: {name:'Минералы',         short:'Минералы', unit:'%',    vals:[6.0,5.9,5.9,6.0],         norm:[4.4,5.4],   dom:[3,8],      dec:1, better:'in'},
+  subfat:  {name:'Подкожный жир',    short:'Подкожный',unit:'кг',   vals:[5.6,6.0,7.2,5.6],         norm:[7.6,14.8],  dom:[0,22],     dec:1, better:'low'},
+  visceral:{name:'Висцеральный жир', short:'Висцеральный',unit:'',  vals:[null,2,2,2],              norm:[1,9],       dom:[0,15],     dec:0, better:'in'},
+  lean:    {name:'Безжировая масса', short:'Безжир.',  unit:'кг',   vals:[80.7,80.4,78.5,78.2],     norm:[57.6,70.4], dom:[50,95],    dec:1, better:'high'},
+  bmr:     {name:'Базовый обмен',    short:'BMR',      unit:'ккал', vals:[2114,2106,2066,2059],     norm:[1835,2160], dom:[1500,2500],dec:0, better:'in'},
+  smi:     {name:'SMI',              short:'SMI',      unit:'кг/м²',vals:[9.7,9.7,9.5,9.3],         norm:null,        dom:[6,12],     dec:1, better:'high'},
+  score:   {name:'Физ. состояние',   short:'Физ. сост.',unit:'балл',vals:[106,106,104,104],         norm:null,        dom:[80,120],   dec:0, better:'high'},
+};
+const BODYTYPE = ['Мускулистый','Мускулистый','Сильный','Активный'];
+const SEG_ORDER = ['Левая рука','Правая рука','Туловище','Левая нога','Правая нога'];
+const SEG = {
+  fat:{ norm:{arm:[80,160],torso:[80,160],leg:[80,160]}, // [кг, % от нормы]
+    'Левая рука':  [[0.5,76.7],[0.5,81.0],[0.2,31.0],[0.5,75.0]],
+    'Правая рука': [[0.5,76.7],[0.5,81.0],[0.2,26.4],[0.5,75.0]],
+    'Туловище':    [[5.5,116.0],[4.1,86.1],[6.3,132.1],[5.3,111.5]],
+    'Левая нога':  [[0.7,34.2],[1.3,68.7],[0.9,48.2],[0.6,31.4]],
+    'Правая нога': [[0.7,35.2],[1.3,68.7],[1.0,49.5],[0.6,31.6]],
+  },
+  muscle:{ norm:{arm:[80,120],torso:[90,110],leg:[90,110]},
+    'Левая рука':  [[4.9,130.1],[4.9,130.3],[4.7,126.8],[4.7,126.8]],
+    'Правая рука': [[4.8,129.8],[5.0,133.5],[4.8,130.0],[4.7,129.3]],
+    'Туловище':    [[36.7,120.4],[36.9,121.2],[36.2,119.3],[36.1,121.0]],
+    'Левая нога':  [[11.7,108.3],[11.8,109.6],[11.5,107.3],[11.3,107.1]],
+    'Правая нога': [[11.7,109.4],[11.6,108.4],[11.5,107.9],[11.3,107.2]],
+  }
+};
+
+/* ═══════════════ УТИЛИТЫ ═══════════════ */
+const root=document.documentElement;
+const cssv = v => getComputedStyle(root).getPropertyValue(v).trim();
+const fmt = (v,d=1) => v==null ? '—' : v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});
+const sign = (v,d) => (v>0?'+':'')+(d==null?v:fmt(v,d));
+const firstDef = a => a.find(v=>v!=null);
+const lastDef  = a => { for(let i=a.length-1;i>=0;i--) if(a[i]!=null) return a[i]; };
+const prevDef  = (a,i) => { for(let j=i-1;j>=0;j--) if(a[j]!=null) return a[j]; return null; };
+const daysBetween = (a,b) => Math.round((new Date(b.slice(0,10))-new Date(a.slice(0,10)))/864e5);
+const ruDate = s => { const [y,m,d]=s.slice(0,10).split('-'); return `${d}.${m}.${y}`; };
+const isDark = () => root.dataset.coreuiTheme==='dark';
+
+function status(m,v){
+  if(v==null) return {cls:'secondary',txt:'нет данных',zone:'none'};
+  if(!m.norm) return {cls:'secondary',txt:'без нормы',zone:'std'};
+  const [a,b]=m.norm;
+  if(v<a) return m.better==='low' ? {cls:'success',txt:'стройный',zone:'low'} : {cls:'info',txt:'ниже нормы',zone:'low'};
+  if(v>b) return m.better==='high'? {cls:'success',txt:'выше нормы · хорошо',zone:'high'} : {cls:'warning',txt:'выше нормы',zone:'high'};
+  return {cls:'success',txt:'в норме',zone:'std'};
+}
+// хорошо ли изменение d для метрики m при текущем значении v
+function goodDelta(m,d,v){
+  if(d===0) return null;
+  if(m.better==='high') return d>0;
+  if(m.better==='low')  return d<0;
+  if(m.norm && v>m.norm[1]) return d<0;
+  if(m.norm && v<m.norm[0]) return d>0;
+  return null; // внутри нормы — нейтрально
+}
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 12;
+const charts={};
+const kill = id => { if(charts[id]){charts[id].destroy();delete charts[id];} };
+const _cc=document.createElement('canvas').getContext('2d');
+function withA(col,a){ _cc.fillStyle=col; const h=_cc.fillStyle;
+  if(h[0]==='#'){ return `rgba(${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)},${a})`; }
+  const m=h.match(/rgba?\(([^)]+)\)/); if(!m) return col; const [r,g,b]=m[1].split(',').map(x=>x.trim()); return `rgba(${r},${g},${b},${a})`; }
+const theme = () => ({text:cssv('--cui-body-color'),muted:cssv('--cui-secondary-color'),grid:cssv('--cui-border-color'),card:cssv('--cui-card-bg')||cssv('--cui-body-bg'),primary:cssv('--cui-primary'),success:cssv('--cui-success'),info:cssv('--cui-info'),warning:cssv('--cui-warning'),danger:cssv('--cui-danger')});
+const tipOpts = () => ({backgroundColor:isDark()?'#0f1218':'#212631',padding:10,titleFont:{weight:'600'},displayColors:false,cornerRadius:6});
+let tooltips=[];
+function initTooltips(){ tooltips.forEach(t=>t.dispose()); tooltips=[...document.querySelectorAll('[data-coreui-toggle="tooltip"]')].map(el=>new coreui.Tooltip(el,{container:'body'})); }
+
+/* ═══════════════ ИКОНКИ (спрайт CoreUI подгружаем инлайном) ═══════════════ */
+fetch('https://cdn.jsdelivr.net/npm/@coreui/icons@3.1.0/sprites/free.svg').then(r=>r.text()).then(t=>{const d=document.createElement('div');d.style.display='none';d.setAttribute('aria-hidden','true');d.innerHTML=t;document.body.prepend(d);}).catch(()=>{});
+
+/* ═══════════════ KPI ═══════════════ */
+function buildKpis(){
+  const el=document.getElementById('kpis'); el.innerHTML='';
+  const items=[['weight','g1','line'],['fatPct','g2','line'],['skel','g3','area'],['bmi','g4','bar']];
+  items.forEach(([k,g,kind],i)=>{
+    const m=M[k], v=m.vals[LAST], f=firstDef(m.vals), d=+(v-f).toFixed(m.dec), pct=(d/f*100).toFixed(1);
+    const good=goodDelta(m,d,v); const arrow=d>0?'cil-arrow-top':d<0?'cil-arrow-bottom':'cil-swap-horizontal';
+    const st=status(m,v);
+    el.insertAdjacentHTML('beforeend',`<div class="col-sm-6 col-xl-3"><div class="card kpi ${g} fade-up" style="animation-delay:${i*.07}s"><span class="glow"></span>
+      <div class="card-body pb-0 d-flex justify-content-between align-items-start">
+        <div><div class="fs-4 fw-semibold">${fmt(v,m.dec)} <span class="fs-6 fw-normal">${m.unit}</span><span class="delta"><svg class="icon icon-sm"><use href="#${arrow}"/></svg>${sign(d,m.dec)} ${m.unit}</span></div>
+        <div>${m.name}<span class="opacity-75"> · ${st.txt}</span></div></div>
+        <div class="dropdown"><button class="btn btn-link p-0 text-white" data-coreui-toggle="dropdown"><svg class="icon"><use href="#cil-list"/></svg></button>
+          <ul class="dropdown-menu dropdown-menu-end"><li><h6 class="dropdown-header">История</h6></li>${m.vals.map((x,j)=>`<li><span class="dropdown-item-text small">${LBL[j]}: <b>${fmt(x,m.dec)}</b> ${m.unit}</span></li>`).join('')}<li><hr class="dropdown-divider"></li><li><span class="dropdown-item-text small">Норма ${m.norm?m.norm[0]+'–'+m.norm[1]:'—'} · с первого замера ${sign(pct)} %</span></li></ul></div>
+      </div>
+      <div class="kpi-chart"><canvas id="sp${i}"></canvas></div></div></div>`);
+  });
+  items.forEach(([k,g,kind],i)=>{
+    const m=M[k]; kill('sp'+i);
+    charts['sp'+i]=new Chart(document.getElementById('sp'+i),{type:kind==='bar'?'bar':'line',
+      data:{labels:LBL,datasets:[{data:m.vals,borderColor:'rgba(255,255,255,.7)',backgroundColor:kind==='area'?'rgba(255,255,255,.25)':'rgba(255,255,255,.5)',fill:kind==='area',tension:.4,borderWidth:2,pointRadius:kind==='bar'?0:4,pointHoverRadius:6,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,.5)',borderRadius:4,barPercentage:.45}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:700},layout:{padding:{top:6,bottom:0,left:kind==='bar'?24:10,right:kind==='bar'?24:10}},
+        plugins:{legend:{display:false},tooltip:{...tipOpts(),callbacks:{label:c=>fmt(c.parsed.y,m.dec)+' '+m.unit}}},
+        scales:{x:{display:false},y:{display:false,suggestedMin:Math.min(...m.vals)-(kind==='bar'?3:1),suggestedMax:Math.max(...m.vals)+1}}}});
+  });
+}
+
+/* ═══════════════ ИНСАЙТЫ ═══════════════ */
+function buildInsights(){
+  const days=daysBetween(DATES[0],DATES[LAST]);
+  document.getElementById('insTitle').textContent=`Итоги за ${days} дней`;
+  document.getElementById('insSub').textContent=`${ruDate(DATES[0])} → ${ruDate(DATES[LAST])} · ${N} замера`;
+  document.getElementById('insBadge').textContent=`Физ. состояние ${M.score.vals[LAST]} из 120`;
+  const dW=+(M.weight.vals[LAST]-M.weight.vals[0]).toFixed(2), dF=+(M.fatKg.vals[LAST]-M.fatKg.vals[0]).toFixed(1), dL=+(M.lean.vals[LAST]-M.lean.vals[0]).toFixed(1);
+  const dS=+(M.skel.vals[LAST]-M.skel.vals[0]).toFixed(1);
+  // выброс: замер, где жир % дальше всего от медианы
+  const fp=M.fatPct.vals, med=[...fp].sort((a,b)=>a-b)[Math.floor(N/2)], out=fp.map((v,i)=>[Math.abs(v-med),i]).sort((a,b)=>b[0]-a[0])[0][1];
+  const ins=[
+    {c:'primary',i:'cil-balance-scale',t:`Вес ${sign(dW,1)} кг`,s:`С ${fmt(M.weight.vals[0],2)} до ${fmt(M.weight.vals[LAST],2)} кг. ${M.weight.vals[LAST]<=M.weight.norm[1]?'Вошёл в норму (до '+M.weight.norm[1]+' кг).':'Норма до '+M.weight.norm[1]+' кг.'}`},
+    {c:'info',i:'cil-drop',t:`Жир ${sign(dF,1)} кг, мышцы ${sign(dS,1)} %`,s:`Жировая масса ${fmt(M.fatKg.vals[0],1)} → ${fmt(M.fatKg.vals[LAST],1)} кг, скелетные мышцы ${fmt(M.skel.vals[0],1)} → ${fmt(M.skel.vals[LAST],1)} %. Состав почти не изменился.`},
+    {c:'warning',i:'cil-bolt',t:`Безжировая масса ${sign(dL,1)} кг`,s:`${fmt(M.lean.vals[0],1)} → ${fmt(M.lean.vals[LAST],1)} кг. Значит, ушла в основном вода и «сухая» масса, а не жир. BMR ${M.bmr.vals[0]} → ${M.bmr.vals[LAST]} ккал.`},
+    {c:'danger',i:'cil-warning',t:`Выброс: замер ${LBL[out]}`,s:`Жир ${fmt(fp[out],1)} %, вода ${fmt(M.water.vals[out],1)} % — выбивается из ряда. Похоже на другую гидратацию или время замера; сравнивать лучше по остальным точкам.`},
+  ];
+  document.getElementById('insights').innerHTML=ins.map(x=>`<div class="col-md-6 col-xl-3"><div class="insight"><div class="ico bg-${x.c} bg-opacity-10 text-${x.c}"><svg class="icon"><use href="#${x.i}"/></svg></div><div><b>${x.t}</b><small>${x.s}</small></div></div></div>`).join('');
+}
+
+/* ═══════════════ ГЛАВНЫЙ ГРАФИК ═══════════════ */
+let curMetric='weight', showNorm=true;
+const MAIN=['weight','fatPct','skel','bmi','water','lean'];
+const MORE=['fatKg','muscle','protein','mineral','subfat','bmr','visceral','smi','score'];
+function buildMetricButtons(){
+  document.getElementById('metricGroup').innerHTML=MAIN.map(k=>`<button type="button" class="btn btn-outline-secondary ${k===curMetric?'active':''}" data-k="${k}">${M[k].short}</button>`).join('');
+  document.getElementById('metricMore').innerHTML=MORE.map(k=>`<li><a class="dropdown-item ${k===curMetric?'active':''}" href="#dyn" data-k="${k}">${M[k].name}</a></li>`).join('');
+  document.querySelectorAll('#metricGroup [data-k],#metricMore [data-k]').forEach(b=>b.onclick=e=>{e.preventDefault();curMetric=b.dataset.k;buildMetricButtons();buildMain();});
+}
+document.getElementById('normBtn').onclick=()=>{showNorm=!showNorm;document.getElementById('normBtn').classList.toggle('btn-primary',showNorm);document.getElementById('normBtn').classList.toggle('btn-outline-secondary',!showNorm);buildMain();};
+function buildMain(){
+  const m=M[curMetric], t=theme(); kill('main');
+  const vals=m.vals.filter(v=>v!=null); let lo=Math.min(...vals),hi=Math.max(...vals); const spread=(hi-lo)||1;
+  if(m.norm&&showNorm) m.norm.forEach(b=>{ if(b>=lo-spread*3&&b<=hi+spread*3){lo=Math.min(lo,b);hi=Math.max(hi,b);} });
+  const pad=(hi-lo)*.35||1;
+  const grad=(ctx)=>{const g=ctx.chart.ctx.createLinearGradient(0,0,0,ctx.chart.height);g.addColorStop(0,withA(t.primary,0.33));g.addColorStop(1,withA(t.primary,0.0));return g;};
+  const ds=[{label:m.name,data:m.vals,borderColor:t.primary,backgroundColor:grad,fill:true,tension:.38,borderWidth:2.5,pointRadius:5,pointHoverRadius:7,pointBackgroundColor:t.card,pointBorderWidth:2.5,order:0}];
+  if(m.norm&&showNorm){
+    ds.push({label:'норма',data:LBL.map(()=>m.norm[1]),borderColor:withA(t.success,0.6),borderDash:[5,4],borderWidth:1,pointRadius:0,backgroundColor:withA(t.success,0.11),fill:'+1',order:2});
+    ds.push({label:'норма мин',data:LBL.map(()=>m.norm[0]),borderColor:withA(t.success,0.6),borderDash:[5,4],borderWidth:1,pointRadius:0,fill:false,order:3});
+  }
+  charts.main=new Chart(document.getElementById('mainChart'),{type:'line',data:{labels:LBL,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{...tipOpts(),filter:i=>i.datasetIndex===0,callbacks:{
+        title:i=>ruDate(DATES[i[0].dataIndex])+' · '+DATES[i[0].dataIndex].slice(11),
+        label:c=>{const i=c.dataIndex,v=c.parsed.y,p=prevDef(m.vals,i);const o=[`${m.name}: ${fmt(v,m.dec)} ${m.unit}`];if(p!=null)o.push(`к прошлому замеру: ${sign(+(v-p).toFixed(m.dec),m.dec)} ${m.unit}`);if(m.norm)o.push(`норма: ${m.norm[0]}–${m.norm[1]}`);o.push(`оценка: ${status(m,v).txt}`);return o;}}}},
+      scales:{x:{grid:{color:withA(t.grid,0.5)},ticks:{color:t.muted},border:{color:t.grid}},
+              y:{suggestedMin:lo-pad,suggestedMax:hi+pad,grid:{color:withA(t.grid,0.5)},border:{display:false,dash:[4,4]},ticks:{color:t.muted,callback:v=>fmt(v,m.dec>1?1:m.dec)}}}}});
+  document.getElementById('dynSub').textContent=`${m.name}${m.unit?', '+m.unit:''} · норма ${m.norm?m.norm[0]+'–'+m.norm[1]:'не задана'}`;
+  buildStats();
+}
+function buildStats(){
+  const el=document.getElementById('stats'); el.innerHTML='';
+  [['weight','success'],['fatPct','info'],['skel','warning'],['bmi','danger'],['bmr','primary']].forEach(([k,c])=>{
+    const m=M[k],v=m.vals[LAST],f=firstDef(m.vals),d=+(v-f).toFixed(m.dec),st=status(m,v);
+    const pct=Math.max(4,Math.min(100,(v-m.dom[0])/(m.dom[1]-m.dom[0])*100));
+    el.insertAdjacentHTML('beforeend',`<div class="col-6 col-md stat"><div class="text-medium-emphasis small">${m.name}</div><div class="fw-semibold">${fmt(v,m.dec)} ${m.unit} <span class="badge text-bg-${st.cls} bg-opacity-25 text-${st.cls==='secondary'?'body':st.cls+'-emphasis'} fw-normal">${st.txt}</span></div><div class="progress"><div class="progress-bar bg-${c}" style="width:${pct}%"></div></div><div class="small text-medium-emphasis mt-1">Δ ${sign(d,m.dec)} ${m.unit}</div></div>`);
+  });
+}
+
+/* ═══════════════ СПИДОМЕТРЫ ═══════════════ */
+let curDate=LAST;
+function buildDateGroup(){
+  document.getElementById('dateGroup').innerHTML=LBL.map((l,i)=>`<button type="button" class="btn btn-outline-secondary ${i===curDate?'active':''}" data-i="${i}">${l}</button>`).join('');
+  document.querySelectorAll('#dateGroup [data-i]').forEach(b=>b.onclick=()=>{curDate=+b.dataset.i;buildDateGroup();buildGauges();buildScales();buildBody();});
+}
+const GAUGE_KEYS=['weight','fatPct','skel','bmi','water','protein'];
+function arc(a0,a1,r=82,cx=100,cy=100){ // углы в градусах, 180 = слева, 0 = справа
+  const p=a=>[cx+r*Math.cos(a*Math.PI/180),cy-r*Math.sin(a*Math.PI/180)];
+  const [x0,y0]=p(a0),[x1,y1]=p(a1); const large=Math.abs(a0-a1)>180?1:0;
+  return `M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+}
+function buildGauges(){
+  const el=document.getElementById('gaugeRow');
+  el.innerHTML=GAUGE_KEYS.map((k,idx)=>{
+    const m=M[k],[d0,d1]=m.dom,v=m.vals[curDate],st=status(m,v);
+    const ang=x=>180-(Math.max(d0,Math.min(d1,x))-d0)/(d1-d0)*180;
+    const a=ang(m.norm[0]),b=ang(m.norm[1]),av=v==null?180:ang(v);
+    const prev=prevDef(m.vals,curDate); const d=prev==null?null:+(v-prev).toFixed(m.dec);
+    return `<div class="col-6 col-md-4 col-xl-2"><div class="gauge" id="g_${k}">
+      <svg viewBox="0 0 200 122">
+        <path d="${arc(180,a)}" stroke="var(--bt-low)" stroke-width="14" fill="none" stroke-linecap="round"/>
+        <path d="${arc(a,b)}" stroke="var(--bt-std)" stroke-width="14" fill="none"/>
+        <path d="${arc(b,0)}" stroke="var(--bt-high)" stroke-width="14" fill="none" stroke-linecap="round"/>
+        ${m.vals.map((x,j)=>x==null||j===curDate?'':`<circle cx="${(100+82*Math.cos(ang(x)*Math.PI/180)).toFixed(1)}" cy="${(100-82*Math.sin(ang(x)*Math.PI/180)).toFixed(1)}" r="3.2" fill="var(--cui-card-bg)" stroke="var(--cui-secondary-color)" stroke-width="1.5" opacity=".8"><title>${LBL[j]}: ${fmt(x,m.dec)} ${m.unit}</title></circle>`).join('')}
+        <g class="needle" style="transform:rotate(${(180-av).toFixed(2)}deg)">
+          <path d="M100,100 L24,100" stroke="var(--cui-body-color)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="100" cy="100" r="6" fill="var(--cui-body-color)"/><circle cx="100" cy="100" r="2.5" fill="var(--cui-card-bg)"/>
+        </g>
+        <text class="tk" x="18" y="119" text-anchor="middle">${d0}</text><text class="tk" x="182" y="119" text-anchor="middle">${d1}</text>
+      </svg>
+      <div class="gv">${fmt(v,m.dec)}<span class="fs-6 fw-normal text-medium-emphasis"> ${m.unit}</span></div>
+      <div class="gn">${m.name}</div>
+      <div class="mt-1"><span class="badge text-bg-${st.cls} bg-opacity-25 text-${st.cls==='secondary'?'body':st.cls+'-emphasis'}">${st.txt}</span>${d==null?'':` <span class="badge text-bg-light fw-normal" title="к прошлому замеру">${sign(d,m.dec)}</span>`}</div>
+      <div class="small text-medium-emphasis mt-1">норма ${m.norm[0]}–${m.norm[1]}</div>
+    </div></div>`;
+  }).join('');
+  // анимация стрелки от нуля
+  requestAnimationFrame(()=>{ el.querySelectorAll('.needle').forEach(n=>{const to=n.style.transform;n.style.transition='none';n.style.transform='rotate(0deg)';void n.offsetWidth;n.style.transition='';n.style.transform=to;}); });
+}
+
+/* ═══════════════ ЛИНЕЙНЫЕ ШКАЛЫ ═══════════════ */
+function buildScales(){
+  const el=document.getElementById('scaleList'); el.innerHTML='';
+  ['weight','fatPct','fatKg','skel','muscle','bmi','water','protein','mineral','subfat','visceral','lean','bmr'].forEach(k=>{
+    const m=M[k],[d0,d1]=m.dom,px=v=>Math.max(0,Math.min(100,(v-d0)/(d1-d0)*100)),a=px(m.norm[0]),b=px(m.norm[1]),v=m.vals[curDate],st=status(m,v);
+    let mk='';
+    m.vals.forEach((x,i)=>{ if(x==null||i===curDate) return; mk+=`<div class="m" style="left:${px(x)}%" data-coreui-toggle="tooltip" title="${LBL[i]}: ${fmt(x,m.dec)} ${m.unit}"></div>`; });
+    if(v!=null) mk+=`<div class="m cur ${st.cls==='warning'?'warn':st.cls==='danger'?'bad':''}" style="left:${px(v)}%" data-coreui-toggle="tooltip" title="${LBL[curDate]}: ${fmt(v,m.dec)} ${m.unit} · ${st.txt}"></div><div class="val" style="left:${px(v)}%">${fmt(v,m.dec)}</div>`;
+    el.insertAdjacentHTML('beforeend',`<div class="scale-row"><div class="nm">${m.name}<small>${m.unit||'индекс'} · ${st.txt}</small></div>
+      <div class="scale"><div class="track"><i style="width:${a}%;background:var(--bt-low)"></i><i style="width:${b-a}%;background:var(--bt-std)"></i><i style="flex:1;background:var(--bt-high)"></i></div>
+      <div class="tick" style="left:${a}%">${m.norm[0]}</div><div class="tick" style="left:${b}%">${m.norm[1]}</div><div class="tick" style="left:0;transform:none">${d0}</div><div class="tick" style="left:100%;transform:translateX(-100%)">${d1}</div>${mk}</div>
+      <div class="rng">норма<br><b>${m.norm[0]}–${m.norm[1]}</b></div></div>`);
+  });
+  initTooltips();
+}
+
+/* ═══════════════ КАРТА ТЕЛА ═══════════════ */
+let bodyKind='muscle';
+document.querySelectorAll('#bodyKind [data-k]').forEach(b=>b.onclick=()=>{bodyKind=b.dataset.k;document.querySelectorAll('#bodyKind .btn').forEach(x=>x.classList.toggle('active',x===b));buildBody();buildSeg();});
+function heat(pct,kind,type){ // цвет по % от нормы
+  const [a,b]=SEG[kind].norm[type];
+  if(pct<a)  return {c:'var(--bt-low)', z:'ниже нормы'};
+  if(pct>b)  return {c: kind==='muscle'?'#1f9e4f':'var(--bt-high)', z: kind==='muscle'?'выше нормы · хорошо':'выше нормы'};
+  return {c:'var(--bt-std)', z:'в норме'};
+}
+function buildBody(){
+  const d=SEG[bodyKind], i=curDate;
+  const g=(name,type)=>{const [kg,pct]=d[name][i];const h=heat(pct,bodyKind,type);return {kg,pct,...h,tip:`${name}: ${fmt(kg,1)} кг · ${fmt(pct,1)} % от нормы (${SEG[bodyKind].norm[type][0]}–${SEG[bodyKind].norm[type][1]} %) · ${h.z}`};};
+  const la=g('Левая рука','arm'),ra=g('Правая рука','arm'),to=g('Туловище','torso'),ll=g('Левая нога','leg'),rl=g('Правая нога','leg');
+  const T=(o)=>`data-coreui-toggle="tooltip" title="${o.tip}"`;
+  document.getElementById('bodymap').innerHTML=`<svg viewBox="0 0 200 330" role="img" aria-label="Карта тела">
+    <ellipse cx="100" cy="30" rx="20" ry="24" fill="var(--cui-tertiary-bg)" stroke="var(--cui-border-color)"/>
+    <path class="seg" ${T(to)} fill="${to.c}" d="M70,62 Q100,55 130,62 L136,150 Q118,168 100,168 Q82,168 64,150 Z"/>
+    <path class="seg" ${T(ra)} fill="${ra.c}" d="M132,64 Q150,66 154,84 L160,160 Q156,176 146,172 L140,110 Z"/>
+    <path class="seg" ${T(la)} fill="${la.c}" d="M68,64 Q50,66 46,84 L40,160 Q44,176 54,172 L60,110 Z"/>
+    <path class="seg" ${T(rl)} fill="${rl.c}" d="M104,168 L132,158 L130,250 Q128,290 122,318 Q110,322 104,314 Z"/>
+    <path class="seg" ${T(ll)} fill="${ll.c}" d="M96,168 L68,158 L70,250 Q72,290 78,318 Q90,322 96,314 Z"/>
+    <text class="lbl" x="100" y="110">${fmt(to.kg,1)} кг</text><text class="lbl2" x="100" y="123">${fmt(to.pct,0)} %</text>
+    <text class="lbl" x="34" y="200">${fmt(la.kg,1)}</text><text class="lbl2" x="34" y="211">${fmt(la.pct,0)} %</text>
+    <text class="lbl" x="166" y="200">${fmt(ra.kg,1)}</text><text class="lbl2" x="166" y="211">${fmt(ra.pct,0)} %</text>
+    <text class="lbl" x="58" y="290">${fmt(ll.kg,1)}</text><text class="lbl2" x="58" y="301">${fmt(ll.pct,0)} %</text>
+    <text class="lbl" x="142" y="290">${fmt(rl.kg,1)}</text><text class="lbl2" x="142" y="301">${fmt(rl.pct,0)} %</text>
+    <text class="lbl2" x="60" y="72">L</text><text class="lbl2" x="140" y="72">R</text>
+  </svg>`;
+  const n=SEG[bodyKind].norm;
+  document.getElementById('bodyLegend').innerHTML=`<span><i style="background:var(--bt-low)"></i>ниже</span><span><i style="background:var(--bt-std)"></i>норма</span><span><i style="background:${bodyKind==='muscle'?'#1f9e4f':'var(--bt-high)'}"></i>выше</span>`;
+  document.getElementById('bodyDate').textContent=`${bodyKind==='muscle'?'Мышцы':'Жир'} · замер ${LBL[curDate]} · норма: руки ${n.arm[0]}–${n.arm[1]} %, туловище ${n.torso[0]}–${n.torso[1]} %, ноги ${n.leg[0]}–${n.leg[1]} %`;
+  initTooltips();
+}
+
+/* ═══════════════ СЕГМЕНТЫ ═══════════════ */
+let segUnit=0;
+document.querySelectorAll('#segUnit [data-u]').forEach(b=>b.onclick=()=>{segUnit=+b.dataset.u;document.querySelectorAll('#segUnit .btn').forEach(x=>x.classList.toggle('active',x===b));buildSeg();});
+function buildSeg(){
+  kill('seg'); const t=theme(), data=SEG[bodyKind];
+  const ramp=isDark()?['#4a6a8f','#4f86c4','#3399ff','#9ccaff']:['#c3d9f5','#86b4ec','#3399ff','#1a56a8'];
+  const unit=segUnit?'% от нормы':'кг';
+  const ds=LBL.map((l,i)=>({label:l,data:SEG_ORDER.map(s=>data[s][i][segUnit]),backgroundColor:ramp[i],borderColor:t.card,borderWidth:1,borderRadius:4,barPercentage:.9,categoryPercentage:.72}));
+  charts.seg=new Chart(document.getElementById('segChart'),{type:'bar',data:{labels:SEG_ORDER,datasets:ds},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',align:'end',labels:{color:t.muted,boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'rectRounded'}},
+        tooltip:{...tipOpts(),displayColors:true,callbacks:{label:c=>` ${c.dataset.label}: ${fmt(c.parsed.x,1)} ${unit}`}}},
+      scales:{x:{beginAtZero:true,grid:{color:withA(t.grid,0.5)},ticks:{color:t.muted},border:{display:false},title:{display:true,text:unit,color:t.muted}},
+              y:{grid:{display:false},ticks:{color:t.text},border:{color:t.grid}}}}});
+  document.getElementById('segNote').textContent = bodyKind==='muscle'
+    ? 'Норма мышц: руки 80–120 %, туловище и ноги 90–110 %. Руки стабильно выше нормы (126–133 %), ноги чуть выше (107–110 %). Левая и правая стороны симметричны.'
+    : 'Норма жира по сегментам: 80–160 %. Ноги и руки «низкое», туловище в стандарте. Замер 6 июля выбивается: жир на туловище 132 %, на руках 26–31 %.';
+}
+
+/* ═══════════════ РАДАР ═══════════════ */
+function buildRadar(){
+  kill('radar'); const t=theme();
+  const keys=['water','protein','mineral','muscle','skel','fatPct','lean','bmr'];
+  const norm=(k,i)=>{const m=M[k],v=m.vals[i];return +((v-m.norm[0])/(m.norm[1]-m.norm[0])*100).toFixed(0);};
+  charts.radar=new Chart(document.getElementById('radarChart'),{type:'radar',
+    data:{labels:keys.map(k=>M[k].short),datasets:[
+      {label:LBL[0],data:keys.map(k=>norm(k,0)),borderColor:t.muted,backgroundColor:withA(t.muted,0.13),borderWidth:1.5,borderDash:[4,3],pointRadius:3,pointBackgroundColor:t.muted},
+      {label:LBL[LAST],data:keys.map(k=>norm(k,LAST)),borderColor:t.primary,backgroundColor:withA(t.primary,0.2),borderWidth:2,pointRadius:4,pointBackgroundColor:t.primary}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{color:t.muted,boxWidth:10,usePointStyle:true}},tooltip:{...tipOpts(),displayColors:true,callbacks:{label:c=>{const k=keys[c.dataIndex],m=M[k],i=c.datasetIndex===0?0:LAST;return ` ${c.dataset.label}: ${fmt(m.vals[i],m.dec)} ${m.unit} (${c.parsed.r} % шкалы нормы)`;}}}},
+      scales:{r:{min:-40,max:200,ticks:{stepSize:40,color:t.muted,backdropColor:'transparent',callback:v=>v+'%'},grid:{color:t.grid},angleLines:{color:t.grid},pointLabels:{color:t.text,font:{size:11}}}}}});
+}
+
+/* ═══════════════ СОСТАВ ═══════════════ */
+function buildComp(){
+  kill('comp'); const t=theme(); const w=M.weight.vals[LAST];
+  const parts=[['Вода',+(w*M.water.vals[LAST]/100).toFixed(1),'#2f7fe6'],['Белок',+(w*M.protein.vals[LAST]/100).toFixed(1),'#22a04c'],['Жир',M.fatKg.vals[LAST],'#e55353'],['Минералы',+(w*M.mineral.vals[LAST]/100).toFixed(1),'#c07a00']];
+  charts.comp=new Chart(document.getElementById('compChart'),{type:'doughnut',data:{labels:parts.map(p=>p[0]),datasets:[{data:parts.map(p=>p[1]),backgroundColor:parts.map(p=>p[2]),borderColor:t.card,borderWidth:2,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false},tooltip:{...tipOpts(),callbacks:{label:c=>` ${fmt(c.parsed,1)} кг · ${(c.parsed/w*100).toFixed(1)} %`}}}}});
+  document.getElementById('compSub').textContent=`Замер ${LBL[LAST]} · ${fmt(w,2)} кг`;
+  document.getElementById('compLegend').innerHTML=parts.map(p=>`<div class="d-flex align-items-center gap-2 py-1"><span class="legend-dot" style="background:${p[2]}"></span>${p[0]}<span class="ms-auto fw-semibold">${fmt(p[1],1)} кг</span><span class="text-medium-emphasis" style="width:54px;text-align:end;white-space:nowrap">${(p[1]/w*100).toFixed(1)} %</span></div>`).join('');
+}
+
+/* ═══════════════ МИНИ-КАРТОЧКИ ═══════════════ */
+function buildMinis(){
+  const sc=M.score.vals[LAST], bmr=M.bmr.vals[LAST], bn=M.bmr.norm;
+  const types=['Скрытое ожирение','Незнач. полнота','Ожирение','Худощавость','Стандартное','Сильный','Сильная худоба','Активный','Мускулистый'];
+  const was=new Set(BODYTYPE.slice(0,LAST));
+  document.getElementById('minis').innerHTML=`
+    <div class="card kpi g1 flex-fill"><span class="glow"></span><div class="card-body">
+      <div class="fs-4 fw-semibold">${sc} <span class="fs-6 fw-normal opacity-75">из 120</span></div><div>Физическое состояние</div>
+      <div class="progress mt-3" style="height:6px;background:rgba(255,255,255,.25)"><div class="progress-bar bg-warning" style="width:${sc/120*100}%"></div></div>
+      <div class="small opacity-75 mt-2 text-uppercase" style="letter-spacing:.05em">История: ${M.score.vals.join(' → ')}</div></div></div>
+    <div class="card flex-fill"><div class="card-body">
+      <div class="fs-4 fw-semibold">${bmr} <span class="fs-6 fw-normal text-medium-emphasis">ккал/сутки</span></div><div>Базовый обмен (BMR)</div>
+      <div class="progress mt-3" style="height:6px"><div class="progress-bar bg-info" style="width:${(bmr-bn[0])/(bn[1]-bn[0])*100}%"></div></div>
+      <div class="small text-medium-emphasis mt-2">Норма ${bn[0]}–${bn[1]} · ${M.bmr.vals.join(' → ')}</div></div></div>
+    <div class="card flex-fill"><div class="card-body">
+      <div class="card-title-sm mb-1">Тип телосложения</div>
+      <div class="small text-medium-emphasis mb-2">Сейчас <b class="text-body">${BODYTYPE[LAST]}</b> · раньше: ${[...was].join(', ')}</div>
+      <div class="types">${types.map(t=>`<div class="${t===BODYTYPE[LAST]?'on':was.has(t)?'was':''}">${t}</div>`).join('')}</div></div></div>`;
+}
+
+/* ═══════════════ СРАВНЕНИЕ ═══════════════ */
+function buildCompare(){
+  const A=document.getElementById('cmpA'),B=document.getElementById('cmpB');
+  if(!A.options.length){ [A,B].forEach(s=>s.innerHTML=LBL.map((l,i)=>`<option value="${i}">${l} ${DATES[i].slice(0,4)}</option>`).join('')); A.value=0; B.value=LAST; A.onchange=B.onchange=renderCompare; }
+  renderCompare();
+}
+function renderCompare(){
+  const a=+document.getElementById('cmpA').value,b=+document.getElementById('cmpB').value;
+  let h=`<thead><tr><th>Показатель</th><th class="num">${LBL[a]}</th><th class="num">${LBL[b]}</th><th class="num">Δ</th><th class="num">Δ %</th><th>Оценка</th></tr></thead><tbody>`;
+  Object.values(M).forEach(m=>{const x=m.vals[a],y=m.vals[b];if(x==null||y==null){h+=`<tr><td>${m.name}</td><td class="num">${fmt(x,m.dec)}</td><td class="num">${fmt(y,m.dec)}</td><td class="num flat">—</td><td class="num flat">—</td><td></td></tr>`;return;}
+    const d=+(y-x).toFixed(m.dec),g=goodDelta(m,d,y),cls=d===0?'flat':g===null?'':g?'up':'down',ico=d>0?'cil-arrow-top':d<0?'cil-arrow-bottom':'cil-swap-horizontal';
+    h+=`<tr><td>${m.name} <span class="text-medium-emphasis small">${m.unit}</span></td><td class="num">${fmt(x,m.dec)}</td><td class="num fw-semibold">${fmt(y,m.dec)}</td><td class="num ${cls}"><svg class="icon icon-sm"><use href="#${ico}"/></svg> ${sign(d,m.dec)}</td><td class="num ${cls}">${sign(+(d/x*100).toFixed(1),1)} %</td><td>${g==null?'<span class="text-medium-emphasis small">нейтрально</span>':g?'<span class="badge text-bg-success bg-opacity-25 text-success-emphasis">лучше</span>':'<span class="badge text-bg-danger bg-opacity-25 text-danger-emphasis">хуже</span>'}</td></tr>`;});
+  h+=`<tr><td>Тип телосложения</td><td class="num">${BODYTYPE[a]}</td><td class="num fw-semibold">${BODYTYPE[b]}</td><td colspan="3"></td></tr></tbody>`;
+  document.getElementById('cmpTable').innerHTML=h;
+}
+
+/* ═══════════════ ТАБЛИЦА ═══════════════ */
+function buildTable(){
+  let h=`<thead><tr><th>Показатель</th>${LBL.map(l=>`<th class="num">${l}</th>`).join('')}<th class="num">Δ</th><th class="num">Норма</th><th>Оценка</th></tr></thead><tbody>`;
+  Object.values(M).forEach(m=>{const f=firstDef(m.vals),l=lastDef(m.vals),d=+(l-f).toFixed(m.dec),g=goodDelta(m,d,l),st=status(m,l);
+    h+=`<tr><td>${m.name}${m.unit?` <span class="text-medium-emphasis small">${m.unit}</span>`:''}</td>${m.vals.map((v,i)=>`<td class="num ${i===LAST?'fw-semibold':''}">${fmt(v,m.dec)}</td>`).join('')}<td class="num ${d===0||g==null?'text-medium-emphasis':g?'text-success':'text-danger'}">${sign(d,m.dec)}</td><td class="num text-medium-emphasis">${m.norm?m.norm[0]+'–'+m.norm[1]:'—'}</td><td><span class="badge text-bg-${st.cls} bg-opacity-25 text-${st.cls==='secondary'?'body':st.cls+'-emphasis'} fw-normal">${st.txt}</span></td></tr>`;});
+  h+=`<tr><td>Тип телосложения</td>${BODYTYPE.map(b=>`<td class="num">${b}</td>`).join('')}<td colspan="3"></td></tr></tbody>`;
+  document.getElementById('dataTable').innerHTML=h;
+}
+
+/* ═══════════════ ТЕМА ═══════════════ */
+(function(){const q=new URLSearchParams(location.search).get('theme');let t=null;try{t=localStorage.getItem('bt-theme')}catch(e){}
+  if(q==='dark'||q==='light')t=q; if(!t&&matchMedia('(prefers-color-scheme: dark)').matches)t='dark'; root.dataset.coreuiTheme=t==='dark'?'dark':'light';})();
+function syncTheme(){document.querySelector('#themeIcon use').setAttribute('href',isDark()?'#cil-sun':'#cil-moon');}
+document.getElementById('themeBtn').onclick=()=>{root.dataset.coreuiTheme=isDark()?'light':'dark';try{localStorage.setItem('bt-theme',root.dataset.coreuiTheme)}catch(e){};syncTheme();buildCharts();};
+
+/* ═══════════════ НАВИГАЦИЯ (подсветка активного раздела) ═══════════════ */
+const navLinks=[...document.querySelectorAll('#sideNav a.nav-link[href^="#"]')];
+const sections=navLinks.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){navLinks.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id));}});},{rootMargin:'-30% 0px -60% 0px'}).observe(document.body) ;
+sections.forEach(s=>new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)navLinks.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+s.id));});},{rootMargin:'-25% 0px -65% 0px'}).observe(s));
+
+/* ═══════════════ СБОРКА ═══════════════ */
+function buildCharts(){buildKpis();buildMain();buildSeg();buildRadar();buildComp();buildGauges();}
+function buildAll(){
+  document.getElementById('hdrDate').textContent='Последний замер: '+ruDate(DATES[LAST])+' '+DATES[LAST].slice(11);
+  document.getElementById('ftDates').textContent=DATES.map(d=>ruDate(d).slice(0,5)).join(' · ')+'.'+DATES[LAST].slice(0,4);
+  buildInsights();buildMetricButtons();buildDateGroup();buildScales();buildBody();buildMinis();buildCompare();buildTable();buildCharts();
+}
+syncTheme();buildAll();
+</script>
+</body>
+</html>

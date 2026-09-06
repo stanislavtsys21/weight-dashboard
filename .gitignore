@@ -3,3 +3,4 @@
 *.png
 _tool/
 .DS_Store
+_v1*
