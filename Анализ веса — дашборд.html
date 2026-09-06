@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Состав тела — динамика</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#f3f4f7; --card:#ffffff; --border:#dbdfe6; --sidebar:#212631; --sidebar-text:rgba(255,255,255,.6);
+  --text:#212631; --muted:#6b7785; --grid:#e9ecf1;
+  --primary:#5856d6; --info:#3399ff; --warning:#f9b115; --danger:#e55353; --success:#2eb85c;
+  --low:#8fc3ec; --std:#5cc27a; --high:#f2b27a;
+  --shadow:0 1px 2px rgba(0,0,0,.04);
+}
+html[data-theme="dark"]{
+  --bg:#1c2028; --card:#262c38; --border:#323a48; --sidebar:#171a21; --sidebar-text:rgba(255,255,255,.55);
+  --text:#e2e6ea; --muted:#9aa5b3; --grid:#323a48;
+  --low:#3f7fb0; --std:#3a9e59; --high:#c48343;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;color:var(--text);background:var(--bg);transition:background .2s,color .2s}
+a{color:inherit;text-decoration:none}
+
+/* ─── каркас ─── */
+.app{display:flex;min-height:100vh}
+.sidebar{width:230px;flex:0 0 230px;background:var(--sidebar);color:var(--sidebar-text);position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
+.brand{height:64px;display:flex;align-items:center;gap:10px;padding:0 20px;color:#fff;font-weight:700;letter-spacing:.3px;border-bottom:1px solid rgba(255,255,255,.08)}
+.brand .logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--primary),var(--info));display:grid;place-items:center;font-size:16px}
+.nav{padding:12px 0;overflow:auto}
+.nav .title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:18px 22px 8px;opacity:.5}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 22px;color:var(--sidebar-text);border-left:3px solid transparent}
+.nav a:hover,.nav a.active{color:#fff;background:rgba(255,255,255,.06);border-left-color:var(--primary)}
+.nav a .ic{width:18px;text-align:center;opacity:.8}
+.nav .badge{margin-left:auto;background:var(--info);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px}
+.sidebar .foot{margin-top:auto;padding:14px 22px;font-size:11px;opacity:.5;border-top:1px solid rgba(255,255,255,.08)}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:64px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:22px;position:sticky;top:0;z-index:5}
+.topbar .links a{margin-right:18px;color:var(--muted)}
+.topbar .links a:first-child{color:var(--text)}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:grid;place-items:center;font-size:15px}
+.iconbtn:hover{background:var(--bg)}
+.avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--info));color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+.crumbs{padding:12px 24px;background:var(--card);border-bottom:1px solid var(--border);color:var(--muted);font-size:13px}
+.crumbs a{color:var(--info);text-decoration:underline}
+.content{padding:24px;display:flex;flex-direction:column;gap:24px}
+
+/* ─── карточки ─── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:flex-start;gap:12px;padding:18px 20px 0}
+.card-h h3{margin:0;font-size:18px;font-weight:600}
+.card-h .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.card-h .tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.card-b{padding:16px 20px 20px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.kpi{border-radius:8px;color:#fff;padding:16px 18px 0;position:relative;overflow:hidden;min-height:150px}
+.kpi.p{background:var(--primary)}.kpi.i{background:var(--info)}.kpi.w{background:var(--warning)}.kpi.d{background:var(--danger)}
+.kpi .v{font-size:26px;font-weight:600;line-height:1.1}
+.kpi .v small{font-size:14px;font-weight:400;opacity:.9;margin-left:6px}
+.kpi .l{font-size:14px;opacity:.9;margin-top:2px}
+.kpi .dots{position:absolute;right:14px;top:12px;opacity:.8;font-size:18px;letter-spacing:1px}
+.kpi .spark{height:70px;margin:14px -18px 0}
+.kpi canvas{display:block}
+
+/* переключатели */
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--text);padding:7px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--border)}
+.seg button:last-child{border-right:0}
+.seg button.active{background:var(--border);font-weight:600}
+html[data-theme="dark"] .seg button.active{background:#3a4354}
+.btn-p{background:var(--primary);color:#fff;border:0;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:13px}
+
+/* нижняя полоса статов */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--border);margin-top:8px}
+.stat{padding:16px 12px;text-align:center;border-right:1px solid var(--border)}
+.stat:last-child{border-right:0}
+.stat .n{color:var(--muted);font-size:13px}
+.stat .v{font-weight:600;margin:2px 0 8px}
+.bar{height:4px;background:var(--grid);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px}
+
+/* шкалы */
+.scale-row{display:grid;grid-template-columns:170px 1fr 92px;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--grid)}
+.scale-row:last-child{border-bottom:0}
+.scale-row .nm{font-weight:500}
+.scale-row .nm small{display:block;color:var(--muted);font-weight:400;font-size:11px}
+.scale-row .rng{text-align:right;color:var(--muted);font-size:12px}
+.scale{position:relative;height:34px}
+.scale .track{position:absolute;left:0;right:0;top:14px;height:8px;border-radius:4px;overflow:hidden;display:flex}
+.scale .track i{display:block;height:100%}
+.scale .tick{position:absolute;top:24px;font-size:10px;color:var(--muted);transform:translateX(-50%)}
+.scale .lab{position:absolute;top:0;font-size:10px;color:var(--muted);transform:translateX(-50%);white-space:nowrap}
+.scale .m{position:absolute;top:13px;width:10px;height:10px;border-radius:50%;background:var(--card);border:2px solid var(--muted);transform:translateX(-50%);cursor:pointer;opacity:.55;transition:transform .15s}
+.scale .m:hover{transform:translateX(-50%) scale(1.3);opacity:1;z-index:2}
+.scale .m.cur{width:14px;height:14px;top:11px;background:var(--primary);border-color:#fff;box-shadow:0 0 0 2px var(--primary);opacity:1;z-index:3}
+.scale .m.cur.bad{background:var(--danger);box-shadow:0 0 0 2px var(--danger)}
+.scale .m.cur.warn{background:var(--warning);box-shadow:0 0 0 2px var(--warning)}
+.scale .val{position:absolute;top:-4px;font-size:12px;font-weight:600;transform:translateX(-50%);color:var(--text);background:var(--card);padding:0 4px;border-radius:3px}
+.tip{position:fixed;z-index:50;pointer-events:none;background:#212631;color:#fff;font-size:12px;padding:6px 9px;border-radius:5px;opacity:0;transition:opacity .1s;white-space:nowrap}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.legend .lo::before{background:var(--low)}.legend .st::before{background:var(--std)}.legend .hi::before{background:var(--high)}
+
+/* сетки */
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:24px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.mini{padding:20px;border-radius:8px}
+.mini .v{font-size:26px;font-weight:700}
+.mini .n{font-weight:600;margin-top:4px}
+.mini .d{font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:.06em;text-transform:uppercase}
+.mini.acc{background:var(--primary);color:#fff}
+.mini.acc .d{color:rgba(255,255,255,.75)}
+.mini .bar{margin-top:10px;background:rgba(255,255,255,.3)}
+.types{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.types div{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 6px;text-align:center;font-size:12px;color:var(--muted)}
+.types div.on{background:#1f6f9c;color:#fff;border-color:#1f6f9c;font-weight:600}
+.types div.was{border-color:var(--info);color:var(--text)}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px}
+.chip.ok{background:rgba(46,184,92,.15);color:#1e8a44}.chip.hi{background:rgba(249,177,21,.18);color:#a06f00}.chip.lo{background:rgba(51,153,255,.15);color:#1c6fd1}.chip.bad{background:rgba(229,83,83,.15);color:#c53838}
+html[data-theme="dark"] .chip.ok{color:#5fd88a}html[data-theme="dark"] .chip.hi{color:#f4c34a}html[data-theme="dark"] .chip.lo{color:#7db8ff}html[data-theme="dark"] .chip.bad{color:#ff8484}
+
+/* таблица */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th{color:var(--muted);font-weight:500;background:var(--bg)}
+th:first-child,td:first-child{text-align:left}
+td:first-child{font-weight:500}
+td.up{color:var(--success)}td.down{color:var(--danger)}
+tr:hover td{background:rgba(88,86,214,.05)}
+.twrap{overflow-x:auto}
+
+.chart-box{position:relative;height:340px}
+.chart-sm{position:relative;height:250px}
+.note{font-size:12px;color:var(--muted);line-height:1.5}
+
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid3{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}.stat:nth-child(3n){border-right:0}}
+@media(max-width:820px){.sidebar{display:none}.scale-row{grid-template-columns:1fr;gap:6px}.scale-row .rng{text-align:left}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">⚖️</div>СОСТАВ ТЕЛА</div>
+    <nav class="nav">
+      <a href="#top" class="active"><span class="ic">▦</span>Дашборд<span class="badge">4 замера</span></a>
+      <div class="title">Разделы</div>
+      <a href="#dyn"><span class="ic">📈</span>Динамика</a>
+      <a href="#scales"><span class="ic">📏</span>Шкалы</a>
+      <a href="#seg"><span class="ic">🧍</span>Сегменты</a>
+      <a href="#comp"><span class="ic">◔</span>Состав</a>
+      <a href="#table"><span class="ic">▤</span>Таблица</a>
+      <div class="title">Профиль</div>
+      <a><span class="ic">👤</span>Stanislav Tsys</a>
+      <a><span class="ic">📐</span>Рост 185 см · 33 года</a>
+    </nav>
+    <div class="foot">Источник: отчёты весов «life»<br>30.06 · 04.07 · 06.07 · 05.09.2026</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span style="font-size:18px;color:var(--muted)">☰</span>
+      <div class="links"><a href="#top">Дашборд</a><a href="#dyn">Динамика</a><a href="#table">Таблица</a></div>
+      <div class="right">
+        <button class="iconbtn" id="themeBtn" title="Тёмная / светлая тема">🌙</button>
+        <div class="avatar">ST</div>
+      </div>
+    </header>
+    <div class="crumbs" id="top"><a href="#top">Главная</a> &nbsp;/&nbsp; Анализ веса &nbsp;·&nbsp; последний замер <b id="lastDate"></b></div>
+
+    <main class="content">
+
+      <!-- KPI -->
+      <section class="kpis" id="kpis"></section>
+
+      <!-- Главный график -->
+      <section class="card" id="dyn">
+        <div class="card-h">
+          <div><h3>Динамика показателей</h3><div class="sub" id="dynSub">30 июня – 5 сентября 2026</div></div>
+          <div class="tools"><div class="seg" id="metricSeg"></div></div>
+        </div>
+        <div class="card-b">
+          <div class="chart-box"><canvas id="mainChart"></canvas></div>
+          <div class="note" style="margin-top:8px">Зелёная полоса — нормальный диапазон по отчёту. Наведи на точку — увидишь значение и изменение к прошлому замеру.</div>
+        </div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <!-- Шкалы -->
+      <section class="card" id="scales">
+        <div class="card-h">
+          <div><h3>Шкалы оценки</h3><div class="sub">Как в отчёте весов: где ты относительно нормы</div></div>
+          <div class="tools"><div class="seg" id="dateSeg"></div></div>
+        </div>
+        <div class="card-b">
+          <div class="legend"><span class="lo">Низкое</span><span class="st">Стандарт</span><span class="hi">Высокое</span><span style="color:var(--muted)">○ прошлые замеры · ● выбранный</span></div>
+          <div id="scaleList"></div>
+        </div>
+      </section>
+
+      <!-- Сегменты + состав -->
+      <div class="grid2">
+        <section class="card" id="seg">
+          <div class="card-h">
+            <div><h3>Сегментарный анализ</h3><div class="sub">Руки, туловище, ноги — по каждому замеру</div></div>
+            <div class="tools">
+              <div class="seg" id="segKind"><button data-k="muscle" class="active">Мышцы</button><button data-k="fat">Жир</button></div>
+              <div class="seg" id="segUnit"><button data-u="0" class="active">кг</button><button data-u="1">% от нормы</button></div>
+            </div>
+          </div>
+          <div class="card-b"><div class="chart-sm" style="height:300px"><canvas id="segChart"></canvas></div>
+          <div class="note" id="segNote"></div></div>
+        </section>
+
+        <section class="card" id="comp">
+          <div class="card-h"><div><h3>Состав тела</h3><div class="sub" id="compSub"></div></div></div>
+          <div class="card-b">
+            <div class="chart-sm" style="height:220px"><canvas id="compChart"></canvas></div>
+            <div id="compLegend" style="margin-top:12px;font-size:13px;line-height:1.9"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Мини-карточки -->
+      <div class="grid3" id="minis"></div>
+
+      <!-- Таблица -->
+      <section class="card" id="table">
+        <div class="card-h"><div><h3>Все показатели</h3><div class="sub">Полная таблица по четырём замерам, Δ = последний минус первый</div></div></div>
+        <div class="card-b twrap"><table id="dataTable"></table></div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* ─────────── ДАННЫЕ (считаны с 4 отчётов) ─────────── */
+const DATES = ['2026-06-30 09:11','2026-07-04 10:15','2026-07-06 09:48','2026-09-05 09:14'];
+const LBL   = ['30 июн','4 июл','6 июл','5 сен'];
+const N = DATES.length, LAST = N-1;
+
+// better: 'in' — хорошо быть внутри нормы; 'high' — выше нормы это хорошо (мышцы); 'low' — ниже нормы это хорошо (жир)
+const M = {
+  weight:  {name:'Вес',               unit:'кг',   vals:[88.65,88.75,88.00,85.95], norm:[64.0,86.6], dom:[40,130], dec:2, better:'in',   color:'primary'},
+  fatPct:  {name:'Масса жира',        unit:'%',    vals:[8.9,9.4,10.8,9.0],        norm:[10.0,20.0], dom:[0,35],   dec:1, better:'low',  color:'info'},
+  fatKg:   {name:'Жир',               unit:'кг',   vals:[7.9,8.3,9.5,7.7],         norm:[8.6,17.2],  dom:[0,30],   dec:1, better:'low'},
+  skel:    {name:'Скелетные мышцы',   unit:'%',    vals:[52.3,52.0,51.2,52.2],     norm:[40.7,52.3], dom:[30,65],  dec:1, better:'high', color:'warning'},
+  muscle:  {name:'Мышцы',             unit:'%',    vals:[85.1,84.7,83.4,85.0],     norm:[70.2,86.0], dom:[60,95],  dec:1, better:'high'},
+  bmi:     {name:'ИМТ',               unit:'',     vals:[25.9,25.9,25.7,25.1],     norm:[18.5,25.0], dom:[15,35],  dec:1, better:'in',   color:'danger'},
+  water:   {name:'Вода в организме',  unit:'%',    vals:[66.9,66.6,65.6,66.9],     norm:[54.1,68.6], dom:[45,75],  dec:1, better:'in'},
+  protein: {name:'Белок',             unit:'%',    vals:[18.2,18.1,17.8,18.2],     norm:[14.0,18.3], dom:[10,22],  dec:1, better:'in'},
+  mineral: {name:'Минералы',          unit:'%',    vals:[6.0,5.9,5.9,6.0],         norm:[4.4,5.4],   dom:[3,8],    dec:1, better:'in'},
+  subfat:  {name:'Подкожный жир',     unit:'кг',   vals:[5.6,6.0,7.2,5.6],         norm:[7.6,14.8],  dom:[0,22],   dec:1, better:'low'},
+  visceral:{name:'Висцеральный жир',  unit:'',     vals:[null,2,2,2],              norm:[1,9],       dom:[0,15],   dec:0, better:'in'},
+  lean:    {name:'Безжировая масса',  unit:'кг',   vals:[80.7,80.4,78.5,78.2],     norm:[57.6,70.4], dom:[50,95],  dec:1, better:'high'},
+  bmr:     {name:'BMR (обмен)',       unit:'ккал', vals:[2114,2106,2066,2059],     norm:[1835,2160], dom:[1500,2500],dec:0, better:'in'},
+  smi:     {name:'SMI',               unit:'кг/м²',vals:[9.7,9.7,9.5,9.3],         norm:null,        dom:[6,12],   dec:1, better:'high'},
+  score:   {name:'Физ. состояние',    unit:'балл', vals:[106,106,104,104],         norm:null,        dom:[80,120], dec:0, better:'high'},
+};
+const BODYTYPE = ['Мускулистый','Мускулистый','Сильный','Активный'];
+const SEG = {
+  fat:{ // [кг, % от нормы]; норма 80–160 %
+    'Левая рука':  [[0.5,76.7],[0.5,81.0],[0.2,31.0],[0.5,75.0]],
+    'Правая рука': [[0.5,76.7],[0.5,81.0],[0.2,26.4],[0.5,75.0]],
+    'Туловище':    [[5.5,116.0],[4.1,86.1],[6.3,132.1],[5.3,111.5]],
+    'Левая нога':  [[0.7,34.2],[1.3,68.7],[0.9,48.2],[0.6,31.4]],
+    'Правая нога': [[0.7,35.2],[1.3,68.7],[1.0,49.5],[0.6,31.6]],
+  },
+  muscle:{ // норма: руки 80–120 %, туловище/ноги 90–110 %
+    'Левая рука':  [[4.9,130.1],[4.9,130.3],[4.7,126.8],[4.7,126.8]],
+    'Правая рука': [[4.8,129.8],[5.0,133.5],[4.8,130.0],[4.7,129.3]],
+    'Туловище':    [[36.7,120.4],[36.9,121.2],[36.2,119.3],[36.1,121.0]],
+    'Левая нога':  [[11.7,108.3],[11.8,109.6],[11.5,107.3],[11.3,107.1]],
+    'Правая нога': [[11.7,109.4],[11.6,108.4],[11.5,107.9],[11.3,107.2]],
+  }
+};
+
+/* ─────────── утилиты ─────────── */
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (v,d=1) => v==null ? '—' : v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});
+const sign = v => (v>0?'+':'')+v;
+const lastDefined = arr => { for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) return arr[i]; };
+const firstDefined = arr => arr.find(v=>v!=null);
+function status(m, v){
+  if(v==null) return {cls:'lo',txt:'нет данных'};
+  if(!m.norm) return {cls:'ok',txt:'—'};
+  const [a,b]=m.norm;
+  if(v<a) return {cls: m.better==='low'?'ok':'lo', txt: m.better==='low'?'стройный':'ниже нормы'};
+  if(v>b) return {cls: m.better==='high'?'ok':'hi', txt: m.better==='high'?'выше нормы (хорошо)':'выше нормы'};
+  return {cls:'ok',txt:'в норме'};
+}
+const tip = document.getElementById('tip');
+function showTip(e,html){tip.innerHTML=html;tip.style.opacity=1;moveTip(e)}
+function moveTip(e){tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-34)+'px'}
+function hideTip(){tip.style.opacity=0}
+
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 12;
+const charts = {};
+function kill(id){ if(charts[id]){charts[id].destroy();delete charts[id]} }
+
+/* ─────────── KPI-карточки ─────────── */
+function buildKpis(){
+  const el = document.getElementById('kpis'); el.innerHTML='';
+  const items = [['weight','p','line'],['fatPct','i','line'],['skel','w','area'],['bmi','d','bar']];
+  items.forEach(([k,cls,kind],idx)=>{
+    const m=M[k], v=m.vals[LAST], prev=m.vals[LAST-1], first=firstDefined(m.vals);
+    const d=+(v-first).toFixed(m.dec), pct=(d/first*100).toFixed(1);
+    const arrow = d>0?'↑':d<0?'↓':'→';
+    const card=document.createElement('div'); card.className='kpi '+cls;
+    card.innerHTML=`<div class="dots">⋮</div><div class="v">${fmt(v,m.dec)}<small>${m.unit} (${sign(pct)}% ${arrow})</small></div><div class="l">${m.name} · с 30 июня ${sign(d)} ${m.unit}</div><div class="spark"><canvas id="sp${idx}"></canvas></div>`;
+    el.appendChild(card);
+    kill('sp'+idx);
+    charts['sp'+idx]=new Chart(document.getElementById('sp'+idx),{
+      type: kind==='bar'?'bar':'line',
+      data:{labels:LBL,datasets:[{data:m.vals,borderColor:'rgba(255,255,255,.75)',backgroundColor: kind==='area'?'rgba(255,255,255,.28)':'rgba(255,255,255,.55)',fill:kind==='area',tension:.35,borderWidth:2,pointRadius:kind==='bar'?0:4,pointBackgroundColor:'#fff',pointBorderColor:'rgba(255,255,255,.6)',borderRadius:3,barPercentage:.5}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},layout:{padding:{top:6,bottom:0,left:kind==='bar'?18:6,right:kind==='bar'?18:6}},
+        plugins:{legend:{display:false},tooltip:{displayColors:false,callbacks:{label:c=>fmt(c.parsed.y,m.dec)+' '+m.unit}}},
+        scales:{x:{display:false},y:{display:false,beginAtZero:false,suggestedMin:Math.min(...m.vals)-(kind==='bar'?2:1),suggestedMax:Math.max(...m.vals)+1}}}
+    });
+  });
+}
+
+/* ─────────── главный график ─────────── */
+let curMetric='weight';
+const MAIN_KEYS=['weight','fatPct','fatKg','skel','muscle','bmi','water','protein','lean','subfat','bmr','score'];
+function buildMetricSeg(){
+  const seg=document.getElementById('metricSeg'); seg.innerHTML='';
+  MAIN_KEYS.forEach(k=>{const b=document.createElement('button');b.textContent=M[k].name;b.dataset.k=k;if(k===curMetric)b.classList.add('active');b.onclick=()=>{curMetric=k;buildMetricSeg();buildMain();};seg.appendChild(b);});
+}
+function buildMain(){
+  const m=M[curMetric];
+  kill('main');
+  const text=css('--text'), muted=css('--muted'), grid=css('--grid');
+  const primary=css('--primary'), success=css('--success');
+  const vals=m.vals.filter(v=>v!=null);
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const spread=(hi-lo)||1;
+  // границы нормы добавляем в масштаб только если они рядом со значениями — иначе линия сплющится
+  if(m.norm) m.norm.forEach(b=>{ if(b>=lo-spread*3 && b<=hi+spread*3){lo=Math.min(lo,b);hi=Math.max(hi,b);} });
+  const pad=(hi-lo)*0.35||1;
+  const ds=[{label:m.name,data:m.vals,borderColor:primary,backgroundColor:primary,tension:.35,borderWidth:2,pointRadius:5,pointHoverRadius:7,pointBackgroundColor:css('--card'),pointBorderWidth:2,fill:false,order:0}];
+  if(m.norm){
+    ds.push({label:'Норма макс',data:LBL.map(()=>m.norm[1]),borderColor:'transparent',backgroundColor:'rgba(46,184,92,.14)',pointRadius:0,fill:'+1',order:2,borderWidth:0});
+    ds.push({label:'Норма мин',data:LBL.map(()=>m.norm[0]),borderColor:'transparent',pointRadius:0,fill:false,order:3,borderWidth:0});
+  }
+  charts.main=new Chart(document.getElementById('mainChart'),{type:'line',data:{labels:LBL,datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{displayColors:false,backgroundColor:'#212631',padding:10,
+        filter:i=>i.datasetIndex===0,
+        callbacks:{title:i=>DATES[i[0].dataIndex].replace(' ',' · '),
+          label:c=>{const i=c.dataIndex,v=c.parsed.y;const out=[`${m.name}: ${fmt(v,m.dec)} ${m.unit}`];
+            let p=null;for(let j=i-1;j>=0;j--){if(m.vals[j]!=null){p=m.vals[j];break}}
+            if(p!=null)out.push(`к прошлому: ${sign(+(v-p).toFixed(m.dec))} ${m.unit}`);
+            if(m.norm)out.push(`норма: ${m.norm[0]}–${m.norm[1]}`);
+            out.push(`оценка: ${status(m,v).txt}`);return out;}}}},
+      scales:{x:{grid:{color:grid},ticks:{color:muted},border:{color:grid}},
+              y:{suggestedMin:lo-pad,suggestedMax:hi+pad,grid:{color:grid},border:{color:grid,dash:[4,4]},ticks:{color:muted,callback:v=>fmt(v,m.dec>1?1:m.dec)}}}}});
+  document.getElementById('dynSub').textContent=`${m.name}${m.unit?', '+m.unit:''} · норма ${m.norm?m.norm[0]+'–'+m.norm[1]:'не задана'}`;
+  buildStats();
+}
+function buildStats(){
+  const el=document.getElementById('stats'); el.innerHTML='';
+  const rows=[['weight','success'],['fatPct','info'],['skel','warning'],['bmi','danger'],['bmr','primary']];
+  rows.forEach(([k,c])=>{const m=M[k],v=m.vals[LAST],first=firstDefined(m.vals),d=+(v-first).toFixed(m.dec);
+    const pct=Math.max(4,Math.min(100,(v-m.dom[0])/(m.dom[1]-m.dom[0])*100));
+    const st=status(m,v);
+    el.insertAdjacentHTML('beforeend',`<div class="stat"><div class="n">${m.name}</div><div class="v">${fmt(v,m.dec)} ${m.unit} <span class="chip ${st.cls}">${st.txt}</span></div><div class="bar"><i style="width:${pct}%;background:var(--${c})"></i></div><div class="n" style="margin-top:6px;font-size:12px">Δ с первого замера: <b class="${d<0?'':''}">${sign(d)} ${m.unit}</b></div></div>`);
+  });
+}
+
+/* ─────────── шкалы ─────────── */
+let curDate=LAST;
+function buildDateSeg(){
+  const seg=document.getElementById('dateSeg'); seg.innerHTML='';
+  LBL.forEach((l,i)=>{const b=document.createElement('button');b.textContent=l;if(i===curDate)b.classList.add('active');b.onclick=()=>{curDate=i;buildDateSeg();buildScales();};seg.appendChild(b);});
+}
+function buildScales(){
+  const el=document.getElementById('scaleList'); el.innerHTML='';
+  const keys=['weight','fatPct','fatKg','skel','muscle','bmi','water','protein','mineral','subfat','visceral','lean','bmr'];
+  keys.forEach(k=>{const m=M[k];const [d0,d1]=m.dom;const px=v=>Math.max(0,Math.min(100,(v-d0)/(d1-d0)*100));
+    const a=px(m.norm[0]),b=px(m.norm[1]);
+    const v=m.vals[curDate];const st=status(m,v);
+    let markers='';
+    m.vals.forEach((val,i)=>{if(val==null||i===curDate)return;markers+=`<div class="m" style="left:${px(val)}%" data-t="${LBL[i]}: ${fmt(val,m.dec)} ${m.unit}"></div>`;});
+    if(v!=null) markers+=`<div class="m cur ${st.cls==='bad'?'bad':st.cls==='hi'?'warn':''}" style="left:${px(v)}%" data-t="${LBL[curDate]}: ${fmt(v,m.dec)} ${m.unit} · ${st.txt}"></div><div class="val" style="left:${px(v)}%">${fmt(v,m.dec)}</div>`;
+    el.insertAdjacentHTML('beforeend',`<div class="scale-row"><div class="nm">${m.name}<small>${m.unit||'индекс'} · ${st.txt}</small></div>
+      <div class="scale"><div class="track"><i style="width:${a}%;background:var(--low)"></i><i style="width:${b-a}%;background:var(--std)"></i><i style="flex:1;background:var(--high)"></i></div>
+      <div class="tick" style="left:${a}%">${m.norm[0]}</div><div class="tick" style="left:${b}%">${m.norm[1]}</div><div class="tick" style="left:0;transform:none">${d0}</div><div class="tick" style="left:100%;transform:translateX(-100%)">${d1}</div>${markers}</div>
+      <div class="rng">норма<br><b>${m.norm[0]}–${m.norm[1]}</b></div></div>`);
+  });
+  el.querySelectorAll('.m').forEach(d=>{d.addEventListener('mouseenter',e=>showTip(e,d.dataset.t));d.addEventListener('mousemove',moveTip);d.addEventListener('mouseleave',hideTip);});
+}
+
+/* ─────────── сегменты ─────────── */
+let segKind='muscle', segUnit=0;
+document.getElementById('segKind').onclick=e=>{if(e.target.dataset.k){segKind=e.target.dataset.k;[...e.currentTarget.children].forEach(b=>b.classList.toggle('active',b===e.target));buildSeg();}};
+document.getElementById('segUnit').onclick=e=>{if(e.target.dataset.u!=null){segUnit=+e.target.dataset.u;[...e.currentTarget.children].forEach(b=>b.classList.toggle('active',b===e.target));buildSeg();}};
+function buildSeg(){
+  kill('seg');
+  const data=SEG[segKind], segs=Object.keys(data);
+  const ramp = document.documentElement.dataset.theme==='dark' ? ['#5a7fa8','#5f9be0','#3399ff','#8fc3ff'] : ['#b9d4f5','#7fb0ee','#3399ff','#1b5fb8'];
+  const muted=css('--muted'),grid=css('--grid');
+  const ds=LBL.map((l,i)=>({label:l,data:segs.map(s=>data[s][i][segUnit]),backgroundColor:ramp[i],borderColor:css('--card'),borderWidth:1,borderRadius:3,barPercentage:.85,categoryPercentage:.7}));
+  const unit=segUnit? '% от нормы':'кг';
+  charts.seg=new Chart(document.getElementById('segChart'),{type:'bar',data:{labels:segs,datasets:ds},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',align:'end',labels:{color:muted,boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'rectRounded'}},
+        tooltip:{backgroundColor:'#212631',callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.parsed.x,1)} ${unit}`}}},
+      scales:{x:{beginAtZero:true,grid:{color:grid},ticks:{color:muted},border:{color:grid},title:{display:true,text:unit,color:muted}},
+              y:{grid:{display:false},ticks:{color:css('--text')},border:{color:grid}}}}});
+  document.getElementById('segNote').textContent = segKind==='muscle'
+    ? 'Норма мышц: руки 80–120 %, туловище и ноги 90–110 %. Руки стабильно выше нормы (126–133 %), ноги чуть выше (107–110 %).'
+    : 'Норма жира по сегментам: 80–160 %. Ноги и руки — «низкое», туловище — в стандарте. Замер 6 июля выбивается (жир на туловище 132 %, на руках 26–31 %).';
+}
+
+/* ─────────── состав тела (кольцо) ─────────── */
+function buildComp(){
+  kill('comp');
+  const w=M.weight.vals[LAST];
+  const parts=[['Вода',+(w*M.water.vals[LAST]/100).toFixed(1),'#2f7fe6'],['Белок',+(w*M.protein.vals[LAST]/100).toFixed(1),'#22a04c'],['Жир',M.fatKg.vals[LAST],'#e55353'],['Минералы',+(w*M.mineral.vals[LAST]/100).toFixed(1),'#c07a00']];
+  charts.comp=new Chart(document.getElementById('compChart'),{type:'doughnut',data:{labels:parts.map(p=>p[0]),datasets:[{data:parts.map(p=>p[1]),backgroundColor:parts.map(p=>p[2]),borderColor:css('--card'),borderWidth:2,hoverOffset:6}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{display:false},tooltip:{backgroundColor:'#212631',callbacks:{label:c=>` ${fmt(c.parsed,1)} кг · ${(c.parsed/w*100).toFixed(1)} %`}}}}});
+  document.getElementById('compSub').textContent=`Замер ${LBL[LAST]} 2026 · ${fmt(w,2)} кг`;
+  document.getElementById('compLegend').innerHTML=parts.map(p=>`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:2px;background:${p[2]};display:inline-block"></span>${p[0]}<span style="margin-left:auto;font-weight:600">${fmt(p[1],1)} кг</span><span style="color:var(--muted);width:52px;text-align:right">${(p[1]/w*100).toFixed(1)} %</span></div>`).join('');
+}
+
+/* ─────────── мини-карточки ─────────── */
+function buildMinis(){
+  const el=document.getElementById('minis');
+  const sc=M.score.vals[LAST], bmr=M.bmr.vals[LAST], bmrN=M.bmr.norm;
+  const types=['Скрытое ожирение','Незнач. полнота','Ожирение','Худощавость','Стандартное','Сильный','Сильная худоба','Активный','Мускулистый'];
+  const was=new Set(BODYTYPE.slice(0,LAST));
+  el.innerHTML=`
+    <div class="card mini acc"><div class="v">${sc} <span style="font-size:14px;font-weight:400;opacity:.85">из 120</span></div><div class="n">Физическое состояние</div>
+      <div class="bar"><i style="width:${sc/120*100}%;background:var(--warning)"></i></div><div class="d">История: ${M.score.vals.join(' → ')}</div></div>
+    <div class="card mini"><div class="v">${bmr} <span style="font-size:14px;font-weight:400;color:var(--muted)">ккал</span></div><div class="n">Базовый обмен (BMR)</div>
+      <div class="bar" style="margin-top:10px"><i style="width:${(bmr-bmrN[0])/(bmrN[1]-bmrN[0])*100}%;background:var(--info)"></i></div><div class="d">Норма ${bmrN[0]}–${bmrN[1]} · история ${M.bmr.vals.join(' → ')}</div></div>
+    <div class="card mini"><div class="n" style="margin-top:0">Тип телосложения</div><div class="d">Сейчас: <b style="color:var(--text)">${BODYTYPE[LAST]}</b> · было: ${BODYTYPE.slice(0,LAST).join(', ')}</div>
+      <div class="types">${types.map(t=>`<div class="${t===BODYTYPE[LAST]?'on':was.has(t)?'was':''}">${t}</div>`).join('')}</div></div>`;
+}
+
+/* ─────────── таблица ─────────── */
+function buildTable(){
+  const t=document.getElementById('dataTable');
+  let h=`<thead><tr><th>Показатель</th>${LBL.map(l=>`<th>${l}</th>`).join('')}<th>Δ</th><th>Норма</th><th>Оценка</th></tr></thead><tbody>`;
+  Object.values(M).forEach(m=>{const f=firstDefined(m.vals),l=lastDefined(m.vals),d=+(l-f).toFixed(m.dec);
+    const good = d===0?'':(m.better==='high'?d>0:m.better==='low'?d<0:(m.norm&&l>m.norm[1]?d<0:m.norm&&l<m.norm[0]?d>0:true));
+    const st=status(m,l);
+    h+=`<tr><td>${m.name}${m.unit?` <span style="color:var(--muted);font-weight:400">${m.unit}</span>`:''}</td>${m.vals.map(v=>`<td>${fmt(v,m.dec)}</td>`).join('')}<td class="${d===0?'':good?'up':'down'}">${sign(d)}</td><td style="color:var(--muted)">${m.norm?m.norm[0]+'–'+m.norm[1]:'—'}</td><td><span class="chip ${st.cls}">${st.txt}</span></td></tr>`;});
+  h+=`<tr><td>Тип телосложения</td>${BODYTYPE.map(b=>`<td>${b}</td>`).join('')}<td></td><td></td><td></td></tr></tbody>`;
+  t.innerHTML=h;
+}
+
+/* ─────────── тема ─────────── */
+const root=document.documentElement;
+(function(){const q=new URLSearchParams(location.search).get('theme');let t=null;
+  try{t=localStorage.getItem('bt-theme')}catch(e){}
+  if(q==='dark'||q==='light') t=q;
+  if(!t && matchMedia('(prefers-color-scheme: dark)').matches) t='dark';
+  if(t==='dark') root.dataset.theme='dark';})();
+function syncThemeBtn(){document.getElementById('themeBtn').textContent=root.dataset.theme==='dark'?'☀️':'🌙';}
+document.getElementById('themeBtn').onclick=()=>{root.dataset.theme=root.dataset.theme==='dark'?'':'dark';try{localStorage.setItem('bt-theme',root.dataset.theme||'light')}catch(e){};syncThemeBtn();buildAll();};
+
+/* ─────────── навигация ─────────── */
+document.querySelectorAll('.nav a[href^="#"]').forEach(a=>a.onclick=()=>{document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');});
+
+function buildAll(){
+  document.getElementById('lastDate').textContent=DATES[LAST].replace(' ',' в ').replace(/(\d{4})-(\d{2})-(\d{2})/,'$3.$2.$1');
+  buildKpis();buildMetricSeg();buildMain();buildDateSeg();buildScales();buildSeg();buildComp();buildMinis();buildTable();
+}
+syncThemeBtn();buildAll();
+</script>
+</body>
+</html>
